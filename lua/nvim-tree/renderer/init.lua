@@ -78,12 +78,24 @@ function Renderer:render_hl(bufnr, hl_range_args)
     return
   end
   vim.api.nvim_buf_clear_namespace(bufnr, namespace_highlights_id, 0, -1)
+
+  -- Set the extmarks directly, as vim.hl.range would, for every highlight of every line.
+  -- vim.hl.range is generic: per call it switches buffer context, calls col('$') twice and getregionpos.
+  -- Our ranges are always single line byte ranges, so none of that is needed.
+  -- same priority as vim.hl.range; nil (extmark default) matches the nvim_buf_add_highlight previously used for nvim < 0.11
+  local priority = vim.hl and vim.hl.priorities and vim.hl.priorities.user or nil
+  local set_extmark = vim.api.nvim_buf_set_extmark
+  local opts = { strict = false, priority = priority }
   for _, args in ipairs(hl_range_args) do
-    if vim.fn.has("nvim-0.11") == 1 and vim.hl and vim.hl.range then
-      vim.hl.range(bufnr, namespace_highlights_id, args.higroup, args.start, args.finish, {})
+    local row, end_col = args.start[1], args.finish[2]
+    opts.hl_group = args.higroup
+    if end_col == -1 then
+      -- to end of line, as vim.hl.range does for -1
+      opts.end_row, opts.end_col = row + 1, 0
     else
-      vim.api.nvim_buf_add_highlight(bufnr, namespace_highlights_id, args.higroup, args.start[1], args.start[2], args.finish[2]) ---@diagnostic disable-line: deprecated
+      opts.end_row, opts.end_col = row, end_col
     end
+    set_extmark(bufnr, namespace_highlights_id, row, args.start[2], opts)
   end
 end
 
