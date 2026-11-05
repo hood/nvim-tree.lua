@@ -8,6 +8,7 @@ local DirectoryNode = require("nvim-tree.node.directory")
 
 ---@class (exact) Sorter: nvim_tree.Class
 ---@field private explorer Explorer
+---@field private filetypes table<string, string|false> vim.filetype.match by node name, reset each sort
 local Sorter = Class:extend()
 
 ---@class Sorter
@@ -114,6 +115,17 @@ end
 ---Perform a merge sort using sorter option.
 ---@param t Node[]
 function Sorter:sort(t)
+  -- vim.filetype.match is expensive and the comparator runs O(n log n) times: resolve each name once per sort.
+  -- The cache is rebuilt for every sort so that changes via vim.filetype.add are picked up on the next reload.
+  -- false records "no filetype" so that it is not looked up again.
+  self.filetypes = setmetatable({}, {
+    __index = function(cache, name)
+      local ft = vim.filetype.match({ filename = name }) or false
+      rawset(cache, name, ft)
+      return ft
+    end,
+  })
+
   if self[self.explorer.opts.sort.sorter] then
     self:split_merge(t, 1, #t, self[self.explorer.opts.sort.sorter])
   elseif type(self.explorer.opts.sort.sorter) == "function" then
@@ -125,7 +137,7 @@ function Sorter:sort(t)
         absolute_path = n.absolute_path,
         executable    = n.executable,
         extension     = n.extension,
-        filetype      = vim.filetype.match({ filename = n.name }),
+        filetype      = self.filetypes[n.name] or nil,
         link_to       = n.link_to,
         name          = n.name,
         type          = n.type,
@@ -304,8 +316,9 @@ end
 ---@private
 ---@type SorterComparator
 function Sorter:filetype(a, b)
-  local a_ft = vim.filetype.match({ filename = a.name })
-  local b_ft = vim.filetype.match({ filename = b.name })
+  -- lazily resolved, see Sorter:sort
+  local a_ft = self.filetypes[a.name] or nil
+  local b_ft = self.filetypes[b.name] or nil
 
   -- directories first
   local early_return = self:folders_or_files_first(a, b)
