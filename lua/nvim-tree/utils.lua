@@ -1,3 +1,4 @@
+local bit = require("bit")
 local config = require("nvim-tree.config")
 
 local M = {
@@ -439,14 +440,23 @@ end
 
 --- path is an executable file or directory
 ---@param absolute_path string
+---@param fs_stat uv.fs_stat.result? optional, avoids a syscall for non executable files
 ---@return boolean
-function M.is_executable(absolute_path)
+function M.is_executable(absolute_path, fs_stat)
   if config.os.windows or config.os.wsl then
     --- executable detection on windows is buggy and not performant hence it is disabled
     return false
-  else
-    return vim.uv.fs_access(absolute_path, "X") or false
   end
+
+  -- access(X) can only succeed for a regular file when at least one of the user/group/other execute bits is set, even for root.
+  -- Most files have none, so the mode from the existing stat answers without an fs_access syscall.
+  -- Links are excluded as lstat reports the link's own mode, not the target's.
+  if fs_stat and fs_stat.type == "file" and bit.band(fs_stat.mode, 73) == 0 then -- 73 == 0o111
+    return false
+  end
+
+  -- execute bits set, directory, link or no stat: access(X) is the only way to know for the current user
+  return vim.uv.fs_access(absolute_path, "X") or false
 end
 
 ---List of all option info/values

@@ -27,7 +27,7 @@ function FileNode:new(args)
 
   self.type       = "file"
   self.extension  = string.match(args.name, ".?[^.]+%.(.*)") or ""
-  self.executable = utils.is_executable(args.absolute_path)
+  self.executable = utils.is_executable(args.absolute_path, args.fs_stat)
 end
 
 function FileNode:destroy()

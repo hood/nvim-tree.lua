@@ -290,7 +290,7 @@ function Explorer:reload(node, project)
       else
         local n = nodes_by_path[abs]
         if n then
-          n.executable = utils.is_executable(abs) or false
+          n.executable = utils.is_executable(abs, stat) or false
           n.fs_stat = stat
         end
       end
