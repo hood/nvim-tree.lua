@@ -183,6 +183,26 @@ function M.get_toplevel(path)
     end
   end
 
+  -- Directories are loaded top down, so the parent's toplevel is usually already cached.
+  -- A directory without its own .git (dir, or file for submodules and worktrees) is in the same repository as its parent,
+  -- or in none when the parent is in none. This avoids spawning git rev-parse for every directory.
+  -- GIT_DIR and GIT_WORK_TREE can place the repository anywhere, so always ask git when they are set.
+  if not vim.env.GIT_DIR and not vim.env.GIT_WORK_TREE then
+    local parent = vim.fn.fnamemodify(utils.path_remove_trailing(path), ":h")
+    local parent_tl = M._toplevels_by_path[parent]
+
+    -- TODO remove once 0.12 is the minimum neovim version
+    -- path incorrectly specified as an integer, fixed upstream for neovim 0.12 https://github.com/neovim/neovim/pull/33872
+    ---@diagnostic disable-next-line: param-type-mismatch
+    local has_git = vim.uv.fs_lstat(utils.path_join({ path, ".git" })) ~= nil
+
+    -- parent_tl is the parent's toplevel, or false when the parent is known to be outside of any repository
+    if parent ~= path and parent_tl ~= nil and not has_git then
+      M._toplevels_by_path[path] = parent_tl
+      return parent_tl or nil
+    end
+  end
+
   -- attempt to fetch toplevel, cache if untracked
   local toplevel, git_dir = git_utils.get_toplevel(path)
   if not toplevel or not git_dir then
